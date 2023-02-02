@@ -1,15 +1,15 @@
 #include "thread_pool.h"
 #include <iostream>
 
-ThreadPool::ThreadPool(int thread_num) : workers_(thread_num) {
+ThreadPool::ThreadPool(int thread_num) : workers_(thread_num), stop_(false) {
     std::cout << "in" << std::endl;
     for (int i = 0; i < thread_num; i++) {
         std::thread t([&]{
             std::unique_lock<std::mutex> locker(mtx_);
             while (true) {
-                if (!task_queue_.empty()) {
-                    std::function<void()> task = task_queue_.front();
-                    task_queue_.pop_front();
+                if (!task_list_.empty()) {
+                    std::function<void()> task = task_list_.front();
+                    task_list_.pop();
                     locker.unlock();
                     task();
                     locker.lock();
@@ -32,15 +32,7 @@ ThreadPool::~ThreadPool() {
     }
 }
 
-template<typename Func>
-void ThreadPool::AddTask(Func&& func) {
-    {
-        std::lock_guard<std::mutex> locker(mtx_);
-        if (stop_) return;
-        task_queue_.emplace_back(std::forward<Func>(func));
-    }
-    cond_.notify_one();
-}
+
 
 // template <typename FuncType>
 // std::future<typename std::result_of<FuncType()>::type> ThreadPool::Submit(FuncType f) {

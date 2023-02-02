@@ -13,25 +13,67 @@
 #include <mutex>
 #include <condition_variable>
 #include <vector>
-#include <deque>
+#include <queue>
 #include <functional>
 #include <future>
+#include <atomic>
 
 class ThreadPool {
 public:
+    using TaskType = std::function<void()>;
+
     explicit ThreadPool(int thread_num = std::thread::hardware_concurrency());
-    ThreadPool() = default;
+    ThreadPool() = delete;
     ~ThreadPool();
 
-    template<typename Func>
-    void AddTask(Func&& func);
+    // 支持类成员函数作为任务添加入线程池
+    template<typename TClass, typename TReturn, typename... TParam>
+    void AddTask(TClass* t_this, TReturn (TClass::*t_func)(TParam...),
+                TParam&&... t_param) {
+        {
+            std::lock_guard<std::mutex> locker(mtx_);
+            auto task = std::bind(t_func, t_this, std::forward<TParam>(t_param)...);
+            task_list_.emplace([task]() { task(); });
+        }
+        cond_.notify_one();
+    }
 
-    // template <typename FuncType>
-    // std::future<typename std::result_of<FuncType()>::type> Submit(FuncType f);
+    // 支持非成员函数作为任务添加入线程池
+    template<typename TReturn, typename... TParam>
+    void AddTask(TReturn(*t_func)(TParam...), TParam&&... t_param) {
+        {
+            std::lock_guard<std::mutex> locker(mtx_);
+            auto task = std::bind(t_func, std::forward<TParam>(t_param)...);
+            task_list_.emplace([task]() { task(); });
+        }
+        cond_.notify_one();
+    }
+
+    // 支持无参的可调用对象作为任务添加入线程池
+    template<typename Callable>
+    void AddTask(Callable&& func) {
+        {
+            std::lock_guard<std::mutex> locker(mtx_);
+            task_list_.emplace(std::forward<Callable>(func));
+        }
+        cond_.notify_one();
+    }
+
+    // 支持有参的可调用对象作为任务添加入线程池
+    template<typename Callable, typename... TParam>
+    void AddTask(Callable&& func, TParam&&... t_param) {
+        {
+            std::lock_guard<std::mutex> locker(mtx_);
+            auto task = std::bind(std::forward<Callable>(func), std::forward<TParam>(t_param)...);
+            task_list_.emplace([task]() { task(); });
+        }
+        cond_.notify_one();
+    }
+
 private:
     std::vector<std::thread> workers_;
     std::mutex mtx_;
     std::condition_variable cond_;
-    std::deque<std::function<void()>> task_queue_;
-    bool stop_ = false;
+    std::queue<TaskType> task_list_;
+    std::atomic<bool> stop_;
 };
