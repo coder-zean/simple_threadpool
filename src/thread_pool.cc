@@ -1,6 +1,8 @@
-#include "threadpool.h"
+#include "thread_pool.h"
+#include <iostream>
 
 ThreadPool::ThreadPool(int thread_num) : workers_(thread_num) {
+    std::cout << "in" << std::endl;
     for (int i = 0; i < thread_num; i++) {
         std::thread t([&]{
             std::unique_lock<std::mutex> locker(mtx_);
@@ -40,15 +42,15 @@ void ThreadPool::AddTask(Func&& func) {
     cond_.notify_one();
 }
 
-template <typename FuncType>
-std::future<typename std::result_of<FuncType()>::type> ThreadPool::Submit(FuncType f) {
-    using ResType = typename std::result_of<FuncType()>::type;
-    std::packaged_task<ResType> task(std::move(f));
-    std::future<ResType> res(task.get_future());
-    {
-        std::lock_guard<std::mutex> locker(pool_->mtx);
-        pool_->tasks.emplace(std::move(task));
-    }
-    pool_->cond.notify_one();
-    return res;
-}
+// template <typename FuncType>
+// std::future<typename std::result_of<FuncType()>::type> ThreadPool::Submit(FuncType f) {
+//     using ResType = typename std::result_of<FuncType()>::type;
+//     std::packaged_task<ResType> task(std::move(f));
+//     std::future<ResType> res(task.get_future());
+//     {
+//         std::lock_guard<std::mutex> locker(pool_->mtx);
+//         pool_->tasks.emplace(std::move(task));
+//     }
+//     pool_->cond.notify_one();
+//     return res;
+// }

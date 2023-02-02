@@ -1,5 +1,5 @@
 /**
- * @file threadpool.h
+ * @file thread_pool.h
  * @author zean (13071517766@163.com)
  * @brief 线程池类
  * @version 0.1
@@ -26,8 +26,8 @@ public:
     template<typename Func>
     void AddTask(Func&& func);
 
-    template <typename FuncType>
-    std::future<typename std::result_of<FuncType()>::type> Submit(FuncType f);
+    // template <typename FuncType>
+    // std::future<typename std::result_of<FuncType()>::type> Submit(FuncType f);
 private:
     std::vector<std::thread> workers_;
     std::mutex mtx_;
