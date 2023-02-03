@@ -2,7 +2,6 @@
 #include <iostream>
 
 ThreadPool::ThreadPool(int thread_num) : workers_(thread_num), stop_(false) {
-    std::cout << "in" << std::endl;
     for (int i = 0; i < thread_num; i++) {
         std::thread t([&]{
             std::unique_lock<std::mutex> locker(mtx_);
