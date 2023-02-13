@@ -6,7 +6,7 @@ ThreadPool::ThreadPool(int thread_num) : workers_(thread_num), stop_(false) {
       std::unique_lock<std::mutex> locker(mtx_);
       while (true) {
         if (!task_list_.empty()) {
-          std::function<void()> task = task_list_.front();
+          auto task = task_list_.front();
           task_list_.pop();
           locker.unlock();
           task();

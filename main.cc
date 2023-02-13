@@ -1,70 +1,46 @@
 #include <functional>
 #include <iostream>
+#include <tuple>
+#include <type_traits>
 #include <vector>
 
 #include "thread_pool.h"
-
 using namespace std;
-
-void test_func(int x) { cout << "test(int x)" << endl; }
-
-int test_func_res(double y) {
-  cout << "int test_func_res(double y)" << endl;
-  return static_cast<int>(y);
-}
-
-int test_func_res_zero_arg() {
-  cout << "int test_func_res_zero_arg()" << endl;
-  return 400;
-}
-
-class TestCallable {
-public:
-  void operator()() { cout << "TestCallable::operator()()" << endl; }
-
-  int operator()(int a) {
-    cout << "int TestCallable::operator()(int a)" << endl;
-    return a;
-  }
-};
 
 class Test {
 public:
-  Test() : threadpool_(8) {}
+  Test(int i) : Testi(i) {}
 
-  void Print(int& i) { cout << "Test::Print(int& i)" << endl; }
-
-  int PrintWithRes(int i) {
-    cout << "PrintWithRes(int i)" << endl;
+  int test(int i) {
+    cout << "int test(int i)" << i << endl;
+    cout << "Testi = " << Testi << endl;
     return i;
   }
 
-  void Add() {
-    threadpool_.AddTask(this, &Test::Print, x_);
-    threadpool_.AddTask(&test_func, 10);
-    TestCallable test_call;
-    threadpool_.AddTask(test_call);
-    std::future<int> f1 = threadpool_.Submit(this, &Test::PrintWithRes, 100);
-    cout << "future res = " << f1.get() << endl;
-    std::future<int> f2 = threadpool_.Submit(&test_func_res, 200.0);
-    cout << "future res = " << f2.get() << endl;
-    std::future<int> f3 = threadpool_.Submit(test_call, 300);
-    cout << "future res = " << f3.get() << endl;
-    std::future<int> f4 = threadpool_.Submit(&test_func_res_zero_arg);
-    cout << "future res = " << f4.get() << endl;
-    // function<void(int, int)> call([](int a, int b){
-    //     cout << "function<void(int, int)>" << endl;
-    // });
-    // threadpool_.AddTask(call, 10, 100);
-  }
-
-private:
-  int x_ = 10;
-  ThreadPool threadpool_;
+  int Testi;
 };
 
+int TestFunc(int i, double& b) {
+  cout << "int TestFunc(int i, double b)" << endl;
+  return i;
+}
+
 int main() {
-  Test t;
-  t.Add();
+  ThreadPool p(4);
+  Test t(1000);
+  int b = 10;
+  double c = 100.0;
+  p.AddTask(&Test::test, &t, b);
+  p.AddTask(&Test::test, t, b);
+  p.AddTask(&Test::Testi, &t);
+  p.AddTask(&Test::Testi, t);
+  p.AddTask(&TestFunc, b, std::ref(c));
+
+  std::cout << "1 :" << p.Submit(&Test::test, &t, b).get() << std::endl;
+  std::cout << "2 :" << p.Submit(&Test::test, t, b).get() << std::endl;
+  std::cout << "3 :" << p.Submit(&Test::Testi, &t).get() << std::endl;
+  std::cout << "4 :" << p.Submit(&Test::Testi, t).get() << std::endl;
+  std::cout << "5 :" << p.Submit(&TestFunc, b, std::ref(c)).get() << std::endl;
+
   return 0;
 }

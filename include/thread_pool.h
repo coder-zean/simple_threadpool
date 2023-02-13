@@ -16,7 +16,10 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <tuple>
 #include <vector>
+
+#include "function_wrapper.h"
 
 class ThreadPool {
 public:
@@ -30,79 +33,27 @@ public:
   ThreadPool() = delete;
   ~ThreadPool();
 
-  // 支持类成员函数作为任务添加入线程池
-  template <typename TClass, typename TReturn, typename... TParam>
-  void AddTask(TClass* t_this, TReturn (TClass::*t_func)(TParam...),
-               TParam&&... t_param) {
+  // AddTask方法用于不用获取函数返回值的场景
+  template <typename Callable, typename... Args>
+  void AddTask(Callable&& callable, Args&&... args) {
+    // lambda在出了作用域之后调用，可能会存在引用失效问题，所以这里不能用引用传递，而是使用值传递
+    auto task = [callable, args...] { MakeFuncWrapper(callable, args...)(); };
     {
       std::lock_guard<std::mutex> locker(mtx_);
-      auto task = std::bind(std::forward<decltype(t_func)>(t_func), t_this,
-                            std::ref(t_param)...);
-      task_list_.emplace([task]() { task(); });
+      task_list_.emplace(task);
     }
     cond_.notify_one();
   }
 
-  // 支持无参的可调用对象作为任务添加入线程池
-  template <typename Callable>
-  void AddTask(Callable&& func) {
-    {
-      std::lock_guard<std::mutex> locker(mtx_);
-      task_list_.emplace(std::forward<Callable>(func));
-    }
-    cond_.notify_one();
-  }
-
-  // 支持有参的可调用对象作为任务添加入线程池
-  template <typename Callable, typename... TParam>
-  void AddTask(Callable&& func, TParam&&... t_param) {
-    {
-      std::lock_guard<std::mutex> locker(mtx_);
-      auto task = std::bind(std::forward<Callable>(func),
-                            std::forward<TParam>(t_param)...);
-      task_list_.emplace([task]() { task(); });
-    }
-    cond_.notify_one();
-  }
-
-  // 支持类成员函数作为任务添加入线程池
-  template <typename TClass, typename TReturn, typename... TParam>
-  std::future<TReturn> Submit(TClass* t_this,
-                              TReturn (TClass::*t_func)(TParam...),
-                              TParam&&... t_param) {
-    auto task = std::make_shared<std::packaged_task<TReturn()>>(std::bind(
-        std::forward<decltype(t_func)>(t_func), t_this, std::ref(t_param)...));
-    std::future<TReturn> result = task->get_future();
-    {
-      std::lock_guard<std::mutex> locker(mtx_);
-      task_list_.emplace([task]() { (*task)(); });
-    }
-    cond_.notify_one();
-    return result;
-  }
-
-  // 支持无参的可调用对象作为任务添加入线程池
-  template <typename Callable>
-  auto Submit(Callable&& func) -> std::future<decltype(func())> {
-    using ReturnType = decltype(func());
+  // Submit方法用于需要获取函数返回值的场景
+  template <typename Callable, typename... Args>
+  auto Submit(Callable&& callable, Args&&... args)
+      -> std::future<typename std::remove_reference<
+          decltype(MakeFuncWrapper(callable, args...)())>::type> {
+    using ReturnType = typename std::remove_reference<decltype(MakeFuncWrapper(
+        callable, args...)())>::type;
     auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-        std::bind(std::forward<Callable>(func)));
-    std::future<ReturnType> result = task->get_future();
-    {
-      std::lock_guard<std::mutex> locker(mtx_);
-      task_list_.emplace([task]() { (*task)(); });
-    }
-    cond_.notify_one();
-    return result;
-  }
-
-  // 支持有参的可调用对象作为任务添加入线程池
-  template <typename Callable, typename... TParam>
-  auto Submit(Callable&& func, TParam&&... t_param)
-      -> std::future<decltype(func(t_param...))> {
-    using ReturnType = decltype(func(t_param...));
-    auto task = std::make_shared<std::packaged_task<ReturnType()>>(std::bind(
-        std::forward<Callable>(func), std::forward<TParam>(t_param)...));
+        MakeFuncWrapper(callable, args...));
     std::future<ReturnType> result = task->get_future();
     {
       std::lock_guard<std::mutex> locker(mtx_);
