@@ -1,7 +1,7 @@
 /**
- * @file func_wrapper.h
+ * @file function_wrapper.h
  * @author zean (13071517766@163.com)
- * @brief 可调用对象包装类
+ * @brief 可调用对象包装类（这个文件代码仿写的是std::thread源码）
  * @version 0.1
  * @date 2023-02-02
  *
@@ -13,6 +13,7 @@
 #include <memory>
 #include <tuple>
 #include <type_traits>
+
 
 template <typename T>
 struct SuccessType {

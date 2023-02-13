@@ -25,13 +25,19 @@ class ThreadPool {
 public:
   using TaskType = std::function<void()>;
 
-  static const uint DEFAULT_THREAD_NUM = 8;
+  explicit ThreadPool(int thread_num) : pool_stop_(false) {
+    AddWorkers(thread_num);
+  }
 
-  static uint GetDefaultThreadNum() { return DEFAULT_THREAD_NUM; }
-
-  explicit ThreadPool(int thread_num = std::thread::hardware_concurrency());
   ThreadPool() = delete;
-  ~ThreadPool();
+
+  ~ThreadPool() {
+    pool_stop_.store(true);
+    cond_.notify_all();
+    for (auto& t : workers_) {
+      t.join();
+    }
+  }
 
   // AddTask方法用于不用获取函数返回值的场景
   template <typename Callable, typename... Args>
@@ -63,10 +69,33 @@ public:
     return result;
   }
 
+  // 添加工作线程
+  bool AddWorkers(int worker_num) {
+    for (int i = 0; i < worker_num; i++) {
+      std::thread t([&] {
+        std::unique_lock<std::mutex> locker(mtx_);
+        while (true) {
+          if (!task_list_.empty()) {
+            auto task = task_list_.front();
+            task_list_.pop();
+            locker.unlock();
+            task();
+            locker.lock();
+          } else if (pool_stop_.load()) {
+            break;
+          } else {
+            cond_.wait(locker);
+          }
+        }
+      });
+      workers_.emplace_back(std::move(t));
+    }
+  }
+
 private:
   std::vector<std::thread> workers_;
   std::mutex mtx_;
   std::condition_variable cond_;
   std::queue<TaskType> task_list_;
-  std::atomic<bool> stop_;
+  std::atomic<bool> pool_stop_;
 };
